@@ -14,6 +14,7 @@ class Track(object):
 	def __init__(self, position=None, time=None):
 		self._positions = []
 		self._times = []
+		self._state = 'ACTIVE'
 
 		if (position is not None):
 			self._positions.append(position)
@@ -47,9 +48,6 @@ class Track(object):
 		self._times.extend(time)
 
 	def getLastObservation(self):
-		""" Currently just returns the position of the last observation
-
-		"""
 		if (len(self._positions) < 1):
 			return (None, None)
 
@@ -61,19 +59,8 @@ class Track(object):
 	def age(self):
 		return self._time()
 
-	def getPointSequence(self):
-		# Todo: change return format for easy plotting
-		return self._positions
-
-	def updatePointSequence(self, points):
-		""" For used in applying bulk transforms to all points in track
-
-		"""
-		self._positions = points
-
-	def smoothTrack(self, smoothingFactor=3):
-		newPoints = []
-
+	def length(self):
+		return self._displacement()
 
 	def getMeasurements(self, method='midpoint', scoring='time'):
 		""" Returns list of measurements representing velocity of particle
@@ -142,8 +129,34 @@ class Track(object):
 		# Length of track in number of measurements
 		return self.size()
 
+	def _displacement(self):
+		start = self._positions[0]
+		end = self._positions[-1]
+		diff = (end[0] - start[0], end[1] - start[1])
+
+		return np.linalg.norm(diff)
+
+	def _composite(self):
+		kA = 0.9
+		kD = 0.1
+
+		return kA*self.age() + kD*self._displacement()
+
 	def _constant(self):
 		return 999999
+
+	@property
+	def endPoint(self):
+		return self._positions[-1]
+
+	@property
+	def lastSeen(self):
+		return self._times[-1]
+
+	@property
+	def score(self):
+		# Negative to use min heap as max heap
+		return -self._composite()
 
 	@property
 	def positions(self):
@@ -152,6 +165,36 @@ class Track(object):
 	@property
 	def times(self):
 		return self._times
+
+	@property
+	def state(self):
+		return self._state
+
+	@property
+	def avgSpeed(self):
+		
+		prevPoint = None
+		prevTime = None
+
+		speeds = []
+
+		for (point, time) in zip(self._positions, self._times):
+			if prevPoint is not None and prevTime is not None:
+				diff = (point[0] - prevPoint[0], point[1] - prevPoint[1])
+				dist = np.linalg.norm(diff)
+
+				speeds.append(dist/(time - prevTime))
+
+			prevPoint = point
+			prevTime = time
+
+		return np.mean(speeds)
+		
+		#return self._displacement()/self.age()
+
+	@state.setter
+	def state(self, newState):
+		self._state = newState
 
 	def __sub__(self, other):
 		# Only subtracts matching times
@@ -169,3 +212,9 @@ class Track(object):
 				differences.append((pt1[0]-pt2[0], pt1[1]-pt2[1]))
 
 		return differences
+
+	def __lt__(self, other):
+		return self.score < other.score
+
+	def __gt__(self, other):
+		return self.score > other.score
