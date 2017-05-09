@@ -2,8 +2,6 @@ import cv2
 import numpy as np
 import heapq
 
-import cv_toolkit
-
 from cv_toolkit.data import Dataset
 from cv_toolkit.track import LKOpticalFlowTracker
 from cv_toolkit.detect import GridDetector, ShiTomasiDetector
@@ -11,8 +9,11 @@ from cv_toolkit.detect import GridDetector, ShiTomasiDetector
 import field_toolkit.approx as field_approx
 import field_toolkit.viz as field_viz
 
+from primitives.track import Track
+from primitives.grid import Grid
+
 from filtering.tracks import TrackDB
-from tracking import Track
+from filtering.measurements import MeasurementDB
 from viz.plotting import TrackView
 
 # Load dataset from file
@@ -27,9 +28,15 @@ tView = TrackView('img')
 
 # Pipeline parameters
 detectionInterval = 1 #seconds
-approximationInterval = 10 #seconds
+approximationInterval = 5 #seconds
 desiredActiveTracks = 300
 initialDetection = 30001
+
+# Initialize grid object for measurement filtering
+g = Grid(3840, 2160, 100, 50)
+
+# Setup measurement database
+mDB = MeasurementDB(g, 5)
 
 # Setup Grid Detector
 gd = GridDetector.using_shi_tomasi((20, 300), initialDetection, 0)
@@ -97,15 +104,23 @@ while(d.more()):
 		print("approximating")
 
 		tracks = sorted(tDB.getAllTracks())
+		print(tracks[0].score)
+		print(tracks[-1].score)
 
+		# Take top 100 Tracks
 		if (len(tracks) > 100):
 			tracks = tracks[:100]
 
+		print("filtering measurements")
 		for t in tracks:
-			gp.addMeasurements(t.getMeasurements(scoring='composite'))
+			mDB.addMeasurements(t.measureVelocity(scoring='composite'))
 
+		print("running gpr")
+		gp.clearMeasurements()
+		gp.addMeasurements(mDB.getMeasurements())
 		gp.approximate()
 
+		lastApproximated = timestamp
 	"""
 	hist = list(tDB.getHistoricalTracks())
 	act = list(tDB.getActiveTracks())

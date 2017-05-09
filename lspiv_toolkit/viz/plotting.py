@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 
+from primitives.track import TrackState
+
 plt.ion()
 
 class TrackView(object):
@@ -25,7 +27,7 @@ class TrackView(object):
 		self.refresh()
 
 	def drawEndPoint(self, track, color=(255,0,0)):
-		if (track.state is 'LOST'):
+		if (track.state is TrackState.LOST):
 			color = (0, 0, 255)
 
 		cv2.circle(self._img, track.endPoint, 3, color, -1)
@@ -44,7 +46,7 @@ class TrackView(object):
 		for t in tracks:
 			score = int((-t.score/maxScore)*255)
 			color = (255-score, score, 0)
-			if (t.state is 'LOST'):
+			if (t.state is TrackState.LOST):
 				color = (0, 0, 255)
 			self.drawEndPoint(t, color)
 
@@ -59,7 +61,7 @@ class TrackView(object):
 		for t in tracks:
 			score = int((-t.score/maxScore)*255)
 			color = (255-score, score, 0)
-			if (t.state is 'LOST'):
+			if (t.state is TrackState.LOST):
 				color = (0, 0, 255)
 			self.drawTrack(t, color)
 

@@ -1,6 +1,6 @@
 import heapq
 
-from tracking import Track
+from primitives.track import Track, TrackState
 
 class TrackDB(object):
 
@@ -62,7 +62,7 @@ class TrackDB(object):
 
 			if (points[i] is not None):
 				t.addObservation(tuple(points[i]), timestamp)
-				t.state = 'ACTIVE'
+				t.state = TrackState.ACTIVE
 				updatedTracks.append(t)
 				#heapq.heappush(updatedTracks, t)
 			else:
@@ -76,10 +76,10 @@ class TrackDB(object):
 						print('track too short')
 					else:
 						print('moving track to historical db', age, displacement)
-						t.state = 'HISTORICAL'
+						t.state = TrackState.HISTORICAL
 						heapq.heappush(self._historicalPQ, t)
 				else:
-					t.state = 'LOST'
+					t.state = TrackState.LOST
 					#heapq.heappush(updatedTracks, t)
 					updatedTracks.append(t)
 
@@ -89,11 +89,11 @@ class TrackDB(object):
 		print("active tracks:", len(self._activeList))
 		print("historical tracks:", len(self._historicalPQ))
 
-		if (len(self._historicalPQ) > 500):
+		if (len(self._historicalPQ) > 100):
 			self.pruneTracks()
 
 
-	def pruneTracks(self, numTracks=250):
+	def pruneTracks(self, numTracks=50):
 		prunedTracks = list(self._historicalPQ[:numTracks])
 
 		heapq.heapify(prunedTracks)
