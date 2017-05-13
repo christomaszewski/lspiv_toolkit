@@ -1,4 +1,5 @@
 import heapq
+from sortedcontainers import SortedList
 
 from primitives.track import Track, TrackState
 
@@ -44,6 +45,10 @@ class TrackDB(object):
 		endpoints = [t.endPoint for t in self._activeList]
 		return endpoints
 
+	def getActiveKeyPoints(self):
+		keyPoints = [t.lastKeyPoint for t in self._activeList]
+		return keyPoints
+
 	def addNewTrack(self, track):
 		#heapq.heappush(self._activePQ, track)
 		self._activeList.append(track)
@@ -51,17 +56,14 @@ class TrackDB(object):
 	def addNewTracks(self, tracks):
 		self._activeList.extend(tracks)
 
-
-	def updateActiveTracks(self, points, timestamp):
-		#todo: check that length of points is same as number of active tracks
-
+	def updateActiveTracksKeyPoints(self, keyPoints, timestamp, indices):
 		updatedTracks = []
+		activeList = self._activeList
 
-		for i in range(0, len(self._activeList)-1):
-			t = self._activeList[i]
-
-			if (points[i] is not None):
-				t.addObservation(tuple(points[i]), timestamp)
+		for i, index in enumerate(indices):
+			t = activeList[index]
+			if (keyPoints[i] is not None):
+				t.addKeyPointObservation(keyPoints[i], timestamp)
 				t.state = TrackState.ACTIVE
 				updatedTracks.append(t)
 				#heapq.heappush(updatedTracks, t)
@@ -71,9 +73,55 @@ class TrackDB(object):
 					age = t.age()
 					displacement = t.length()
 					if (age < self._minAge):
+						del t
 						continue
 					elif (displacement < self._minDisplacement):
 						print('track too short')
+						del t
+					else:
+						print('moving track to historical db', age, displacement)
+						t.state = TrackState.HISTORICAL
+						heapq.heappush(self._historicalPQ, t)
+				else:
+					t.state = TrackState.LOST
+					#heapq.heappush(updatedTracks, t)
+					updatedTracks.append(t)
+
+
+		self._activeList = updatedTracks
+
+		print("active tracks:", len(self._activeList))
+		print("historical tracks:", len(self._historicalPQ))
+
+		if (len(self._historicalPQ) > 100):
+			self.pruneTracks()
+
+	def updateActiveTracks(self, points, timestamp):
+		#todo: check that length of points is same as number of active tracks
+
+		updatedTracks = []
+		activeList = self._activeList
+
+		for i, t in enumerate(activeList):
+
+			if (points[i] is not None):
+				if (points[i].ndim < 1):
+					print("error in updates:", points[i])
+				t.addObservation(points[i], timestamp)
+				t.state = TrackState.ACTIVE
+				updatedTracks.append(t)
+				#heapq.heappush(updatedTracks, t)
+			else:
+				if (timestamp - t.lastSeen > self._historicalThreshold):
+					# Candidate for storage
+					age = t.age()
+					displacement = t.length()
+					if (age < self._minAge):
+						del t
+						continue
+					elif (displacement < self._minDisplacement):
+						print('track too short')
+						del t
 					else:
 						print('moving track to historical db', age, displacement)
 						t.state = TrackState.HISTORICAL

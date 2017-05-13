@@ -60,7 +60,7 @@ gd.featureLimit = 2*desiredActiveTracks + 1
 
 # Setup LKTracker
 winSize = (15,15)
-maxLevel = 5
+maxLevel = 0 # pyramids currently leak memory
 criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 20, 0.03)
 
 lk = LKOpticalFlowTracker(winSize, maxLevel, criteria, gray)
@@ -86,10 +86,13 @@ while(d.more()):
 		# Mask active track end points
 		searchMask = np.copy(d.mask)
 
+		print("detecting...")
+
 		for point in tDB.getActiveEndpoints():
 				cv2.circle(searchMask, point, 5, 0, -1)
 
 		detections = gd.detect(gray, searchMask)
+		print("detected new features")
 
 		for p in detections:
 			position = tuple(p)
@@ -97,7 +100,7 @@ while(d.more()):
 			tDB.addNewTrack(t)
 
 		lastDetectionTime = timestamp
-		print("detected new features")
+		print("added new tracks")
 
 
 	if (timestamp - lastApproximated > approximationInterval):
@@ -118,7 +121,7 @@ while(d.more()):
 		print("running gpr")
 		gp.clearMeasurements()
 		gp.addMeasurements(mDB.getMeasurements())
-		gp.approximate()
+		#gp.approximate()
 
 		lastApproximated = timestamp
 	"""
@@ -138,4 +141,8 @@ while(d.more()):
 	tView.drawEndPoints(tDB.getActiveTracks())
 	tView.drawTracks(tDB.getHistoricalTracks())
 
-	cv2.waitKey(1)
+	if (cv2.waitKey(1) & 0xFF) == 27:
+		break
+
+
+cv2.destroyAllWindows()

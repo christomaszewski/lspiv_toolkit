@@ -30,7 +30,8 @@ class TrackView(object):
 		if (track.state is TrackState.LOST):
 			color = (0, 0, 255)
 
-		cv2.circle(self._img, track.endPoint, 3, color, -1)
+		cv2.circle(self._img, tuple(track.endPoint), 3, color, -1)
+				
 
 	def drawTrack(self, track, color=(255,0,0)):
 		points = np.int32(np.asarray(track.positions).reshape(-1,2))
