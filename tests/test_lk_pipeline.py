@@ -22,9 +22,7 @@ from lspiv_toolkit.filtering.tracks import TrackDB
 from lspiv_toolkit.filtering.measurements import MeasurementDB
 from lspiv_toolkit.viz.plotting import TrackView
 
-from memory_profiler import profile
 
-@profile
 def mainFunc():
 
 	# Load dataset from file
