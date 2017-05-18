@@ -1,4 +1,3 @@
-import heapq
 from sortedcontainers import SortedList
 
 from primitives.track import Track, TrackState
@@ -10,10 +9,10 @@ class TrackDB(object):
 		self._historicalThreshold = 0.004 # Allows 1 frame drop with 30 fps video
 
 		# Minimum age of historical tracks
-		self._minAge = 3 #seconds
+		self._minAge = 1.5 #seconds
 
 		# Minimum total displacement of historical tracks
-		self._minDisplacement = 10 #pixels
+		self._minDisplacement =  60 #pixels
 
 		# Minimum avg speed of historical tracks
 		self._minSpeed = 1 #px/s
@@ -24,8 +23,8 @@ class TrackDB(object):
 		# List of active tracks
 		self._activeList = []
 
-		# Priority queue of historical tracks
-		self._historicalPQ = []
+		# SortedList of historical tracks
+		self._historicalList = SortedList()
 
 	def getActiveTracks(self):
 		return self._activeList
@@ -34,11 +33,11 @@ class TrackDB(object):
 		return len(self._activeList)
 
 	def getHistoricalTracks(self):
-		return self._historicalPQ
+		return self._historicalList
 
 	def getAllTracks(self):
 		tracks = list(self._activeList)
-		tracks.extend(self._historicalPQ)
+		tracks.extend(self._historicalList)
 		return tracks
 
 	def getActiveEndpoints(self):
@@ -50,7 +49,6 @@ class TrackDB(object):
 		return keyPoints
 
 	def addNewTrack(self, track):
-		#heapq.heappush(self._activePQ, track)
 		self._activeList.append(track)
 
 	def addNewTracks(self, tracks):
@@ -66,7 +64,6 @@ class TrackDB(object):
 				t.addKeyPointObservation(keyPoints[i], timestamp)
 				t.state = TrackState.ACTIVE
 				updatedTracks.append(t)
-				#heapq.heappush(updatedTracks, t)
 			else:
 				if (timestamp - t.lastSeen > self._historicalThreshold):
 					# Candidate for storage
@@ -78,23 +75,22 @@ class TrackDB(object):
 					elif (displacement < self._minDisplacement):
 						print('track too short')
 						del t
+					elif (t.avgSpeedFast < self._minSpeed):
+						print('track too slow')
+						del t
 					else:
 						print('moving track to historical db', age, displacement)
 						t.state = TrackState.HISTORICAL
-						heapq.heappush(self._historicalPQ, t)
+						self._historicalList.add(t)
 				else:
 					t.state = TrackState.LOST
-					#heapq.heappush(updatedTracks, t)
 					updatedTracks.append(t)
 
 
 		self._activeList = updatedTracks
 
 		print("active tracks:", len(self._activeList))
-		print("historical tracks:", len(self._historicalPQ))
-
-		if (len(self._historicalPQ) > 100):
-			self.pruneTracks()
+		print("historical tracks:", len(self._historicalList))
 
 	def updateActiveTracks(self, points, timestamp):
 		#todo: check that length of points is same as number of active tracks
@@ -120,30 +116,31 @@ class TrackDB(object):
 						del t
 						continue
 					elif (displacement < self._minDisplacement):
-						print('track too short')
+						#print('track too short')
+						del t
+					elif (t.avgSpeedFast < self._minSpeed):
+						#print('track too slow')
 						del t
 					else:
-						print('moving track to historical db', age, displacement)
+						#print('moving track to historical db', age, displacement)
 						t.state = TrackState.HISTORICAL
-						heapq.heappush(self._historicalPQ, t)
+						self._historicalList.add(t)
 				else:
 					t.state = TrackState.LOST
-					#heapq.heappush(updatedTracks, t)
 					updatedTracks.append(t)
 
 
+		del self._activeList
 		self._activeList = updatedTracks
 
 		print("active tracks:", len(self._activeList))
-		print("historical tracks:", len(self._historicalPQ))
+		print("historical tracks:", len(self._historicalList))
 
-		if (len(self._historicalPQ) > 100):
+		if (len(self._historicalList) > 2000):
 			self.pruneTracks()
 
 
-	def pruneTracks(self, numTracks=50):
-		prunedTracks = list(self._historicalPQ[:numTracks])
+	def pruneTracks(self, numTracks=1000):
+		self._historicalList = SortedList(self._historicalList[:numTracks])
 
-		heapq.heapify(prunedTracks)
-
-		self._historicalPQ = prunedTracks
+		

@@ -61,7 +61,7 @@ class TrackView(object):
 		maxScore = max(scores)
 		for t in tracks:
 			score = int((-t.score/maxScore)*255)
-			color = (255-score, score, 0)
+			color = (0, score, 255-score)
 			if (t.state is TrackState.LOST):
 				color = (0, 0, 255)
 			self.drawTrack(t, color)
