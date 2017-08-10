@@ -4,6 +4,7 @@ import os
 import time
 import imageio
 import glob
+import dill
 
 from cv_toolkit.data import Dataset
 from cv_toolkit.detect.features import ShiTomasiDetector
@@ -34,7 +35,7 @@ class BasicPipeline(object):
 
 		# Intervals (seconds)
 		self._detectionInterval = 3
-		self._approximationInterval = 5
+		self._approximationInterval = 100000
 		self._inputImgSaveInterval = 5
 		self._measurementImgSaveInterval = 5
 
@@ -117,6 +118,8 @@ class BasicPipeline(object):
 		self._lastApproximated = timestamp
 		self._lastSavedInput = timestamp
 		self._lastSavedMeasurements = timestamp
+
+		self._lastTimestamp = timestamp
 
 	def loop(self):
 		while(self._data.more()):
@@ -211,3 +214,40 @@ class BasicPipeline(object):
 
 			if cv2.waitKey(1) & 0xFF == 27:
 				break
+
+			self._lastTimestamp = timestamp
+
+	def saveApproximation(self, timestamp=None):
+		if timestamp is None:
+			timestamp = self._lastTimestamp
+
+		print("running gpr")
+		measurements = self._mDB.getMeasurements(measurementsPerCell=1)
+		if len(measurements) > 0:
+			self._gp.clearMeasurements()
+			self._gp.addMeasurements(measurements)
+			approxField = self._gp.approximate()
+		else:
+			print("no measurements")
+			return
+
+		print("saving approx field to file")
+
+		approxFieldFile = self._runDir + f"approx_{timestamp:.2f}.field"
+		with open(approxFieldFile, mode='wb') as f:
+			dill.dump(approxField, f)
+
+
+
+	def saveTracks(self, timestamp=None):
+		if timestamp is None:
+			timestamp = self._lastTimestamp
+
+		self._trackDir =  self._runDir + f"tracks_{timestamp:.2f}/"
+		if not os.path.exists(self._trackDir):
+			os.makedirs(self._trackDir)
+
+		tracks = self._tDB.getHistoricalTracks()
+
+		for i, t in enumerate(tracks):
+			t.save(self._trackDir + f"track_{i}.yaml")

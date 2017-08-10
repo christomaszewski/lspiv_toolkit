@@ -60,7 +60,7 @@ def generateGifs():
 
 
 if __name__ == '__main__':
-	datasetName = 'llobregat_5min'
+	datasetName = 'llobregat_15min'
 	datasetFilename = '../../../datasets/' + datasetName + '.yaml'
 
 	outputDir = '../../../output/'
@@ -68,21 +68,24 @@ if __name__ == '__main__':
 	pipeline = BasicPipeline(datasetFilename, outputDir)
 	pipeline.initialize()
 	pipeline.loop()
+	pipeline.saveTracks()
+	pipeline.saveApproximation()
 
 	plt.close('all')
-	datasetName = 'llobregat_15min'
-	datasetFilename = '../../../datasets/' + datasetName + '.yaml'
+	
+	# datasetName = 'llobregat_15min'
+	# datasetFilename = '../../../datasets/' + datasetName + '.yaml'
 
-	pipeline.load(datasetFilename)
-	pipeline.initialize()
-	pipeline.loop()
+	# pipeline.load(datasetFilename)
+	# pipeline.initialize()
+	# pipeline.loop()
 
-	plt.close('all')
-	datasetName = 'llobregat_2nd_15min'
-	datasetFilename = '../../../datasets/' + datasetName + '.yaml'
+	# plt.close('all')
+	# datasetName = 'llobregat_2nd_15min'
+	# datasetFilename = '../../../datasets/' + datasetName + '.yaml'
 
-	pipeline.load(datasetFilename)
-	pipeline.initialize()
-	pipeline.loop()
+	# pipeline.load(datasetFilename)
+	# pipeline.initialize()
+	# pipeline.loop()
 
 	cv2.destroyAllWindows()
