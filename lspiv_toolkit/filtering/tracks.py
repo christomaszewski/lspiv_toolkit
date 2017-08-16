@@ -89,8 +89,9 @@ class TrackDB(object):
 
 		self._activeList = updatedTracks
 
-		print("active tracks:", len(self._activeList))
-		print("historical tracks:", len(self._historicalList))
+		print(f"Updating tracks. Active: {len(self._activeList)}, Historical: {len(self._historicalList)}")
+		#print("active tracks:", len(self._activeList))
+		#print("historical tracks:", len(self._historicalList))
 
 	def updateActiveTracks(self, points, timestamp):
 		#todo: check that length of points is same as number of active tracks
@@ -133,8 +134,7 @@ class TrackDB(object):
 		del self._activeList
 		self._activeList = updatedTracks
 
-		print("active tracks:", len(self._activeList))
-		print("historical tracks:", len(self._historicalList))
+		print(f"Updating tracks. Active: {len(self._activeList)}, Historical: {len(self._historicalList)}")
 
 		if (len(self._historicalList) > 2000):
 			self.pruneTracks()

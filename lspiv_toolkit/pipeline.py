@@ -131,8 +131,9 @@ class BasicPipeline(object):
 			undistortedImg = self._undistortTransform.transformImage(img)
 
 			# Update image views
-			self._imgView.updateImage(img, timestamp)
-			self._undistortedView.updateImage(undistortedImg, timestamp)
+			# Disabled for now
+			#self._imgView.updateImage(img, timestamp)
+			#self._undistortedView.updateImage(undistortedImg, timestamp)
 
 			# Get current track end points
 			endPoints = np.asarray(self._tDB.getActiveEndpoints())
@@ -143,14 +144,15 @@ class BasicPipeline(object):
 
 			# Pull tracks from Track DB
 			activeTracks = self._tDB.getActiveTracks()
-			historicalTracks = self._tDB.getHistoricalTracks()
-			unwarpedHistorical = [self._undistortTransform.transformTrack(t) for t in historicalTracks]
+			#historicalTracks = self._tDB.getHistoricalTracks()
+			#unwarpedHistorical = [self._undistortTransform.transformTrack(t) for t in historicalTracks]
 
 			# Plot Track overlays
-			self._imgView.plotTracksColoredByScore(activeTracks)
-			self._imgView.plot()
-			self._undistortedView.plotTracksColoredByScore(unwarpedHistorical)
-			self._undistortedView.plot()
+			# Disabled for now
+			#self._imgView.plotTracksColoredByScore(activeTracks)
+			#self._imgView.plot()
+			#self._undistortedView.plotTracksColoredByScore(unwarpedHistorical)
+			#self._undistortedView.plot()
 
 			# If active tracks are low or it is time to run a detection, do so
 			if (len(activeTracks) < self._desiredActiveTracks or timestamp - self._lastDetectionTime > self._detectionInterval):
@@ -167,6 +169,11 @@ class BasicPipeline(object):
 
 			# If its time to save the input images, do so
 			if (timestamp - self._lastSavedInput > self._inputImgSaveInterval):
+				# Update image views
+				self._imgView.updateImage(img, timestamp)
+				self._imgView.plotTracksColoredByScore(activeTracks)
+				self._imgView.plot()
+				self._undistortedView.updateImage(undistortedImg, timestamp)
 				self._imgView.save(f"{self._runDir}source_{timestamp:.2f}.png")
 				self._undistortedView.save(f"{self._runDir}undistorted_{timestamp:.2f}.png")
 
@@ -176,6 +183,8 @@ class BasicPipeline(object):
 			if (timestamp - self._lastSavedMeasurements > self._measurementImgSaveInterval):
 				# Update Measurement DB
 				self._mDB.clearMeasurements()
+				historicalTracks = self._tDB.getHistoricalTracks()
+				unwarpedHistorical = [self._undistortTransform.transformTrack(t) for t in historicalTracks]
 				tracksForMeasurement = [self._pxTransform.transformTrack(t) for t in unwarpedHistorical]
 				for t in tracksForMeasurement:
 					self._mDB.addMeasurements(t.measureVelocity(minDist=0.0, scoring='composite'))
@@ -184,11 +193,6 @@ class BasicPipeline(object):
 				self._measurementView.updateImage(measurementImg, timestamp)
 				self._measurementView.hist2d(self._mDB.getMeasurements())
 				self._measurementView.plot()
-
-				self._measurementView.updateImage(measurementImg, timestamp)
-				self._measurementView.hist2d(self._mDB.getMeasurements())
-				self._measurementView.plot()
-
 
 				self._measurementView.save(f"{self._runDir}measurements_{timestamp:.2f}.png")
 
@@ -216,6 +220,8 @@ class BasicPipeline(object):
 				break
 
 			self._lastTimestamp = timestamp
+
+			del grayImg, img
 
 	def saveApproximation(self, timestamp=None):
 		if timestamp is None:
@@ -248,6 +254,159 @@ class BasicPipeline(object):
 			os.makedirs(self._trackDir)
 
 		tracks = self._tDB.getHistoricalTracks()
+
+		for i, t in enumerate(tracks):
+			t.save(self._trackDir + f"track_{i}.yaml")
+
+
+class SlimPipeline(object):
+	""" A slim version of the lspiv pipeline that just processes the entire
+		dataset in the background without displaying any images to the screen
+
+	"""
+
+	def __init__(self, datasetFile, outputDir):
+		self._outputDir = outputDir
+
+		# Intervals (seconds)
+		self._detectionInterval = 3
+
+		# Feature params
+		self._desiredActiveTracks = 1000
+		self._detectionLimit = 30001
+
+		# Instantiate detector
+		self._detector = ShiTomasiDetector()
+
+		# Load dataset
+		self.load(datasetFile)
+
+
+	def load(self, datasetFile):
+		self._datasetFilename = datasetFile
+		self._data = Dataset.from_file(self._datasetFilename)
+		self._imgWidth, self._imgHeight = self._data.imgSize
+
+		# Setup transformation objects
+		self._undistortTransform = UndistortionTransform(self._data.camera)
+		self._pxTransform = PixelCoordinateTransform(self._data.imgSize)
+
+
+	def initialize(self):
+		""" Initialize new output folder and prepare pipeline for execution
+
+		"""
+
+		# Initialize output folders
+		self._datasetOutputDir = self._outputDir + self._data.name
+		if not os.path.exists(self._datasetOutputDir):
+			os.makedirs(self._datasetOutputDir)
+
+		self._runDir =  self._datasetOutputDir + '/' + time.strftime('%d_%m_%Y_%H_%M_%S/')
+		if not os.path.exists(self._runDir):
+			os.makedirs(self._runDir)
+
+		self._trackDir =  f"{self._runDir}tracks/"
+		if not os.path.exists(self._trackDir):
+			os.makedirs(self._trackDir)
+
+		# Initialize grid object for measurement filtering
+		self._measurementGrid = Grid(self._imgWidth, self._imgHeight, 200, 100)
+		self._detectionGrid = Grid(self._imgWidth, self._imgHeight, 200, 30)
+
+		# Setup Track and Measurement databases
+		self._tDB = TrackDB()
+		self._mDB = MeasurementDB(self._measurementGrid, 5)
+
+		# Setup Grid Detector
+		self._gd = GridDetector.from_grid(self._detector, self._detectionGrid, self._detectionLimit, 50)
+
+		# Detect Initial Features
+		img, timestamp = self._data.read()
+		grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		points = self._gd.detect(grayImg, self._data.mask)
+
+		# Instantiate tracks 
+		self._tDB.addNewTracks([Track.from_point(p, timestamp) for p in points])
+
+		# Setup LKTracker with default params
+		self._lk = LKOpticalFlowTracker(grayImg)
+
+		# Setup GPR field approximator with default params
+		self._gp = field_approx.gp.GPApproximator()
+
+		# Initialize timestamps for pipeline control
+		self._lastDetectionTime = timestamp
+		self._lastTimestamp = timestamp
+
+	def run(self):
+		while(self._data.more()):
+			# Load next image
+			img, timestamp = self._data.read()
+
+			print(f"Dataset {self._data.progress:.2f}% Processed, Current Timestamp: {timestamp:.3f}")
+
+			# Convert image to grayscale for detection and tracking
+			grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+			# Get current track end points
+			endPoints = np.asarray(self._tDB.getActiveEndpoints())
+			# Attempt to track end points using LK optical flow
+			newPoints = self._lk.trackPoints(endPoints, grayImg)
+			# Update track end points with results from LK tracker
+			self._tDB.updateActiveTracks(newPoints, timestamp)
+
+			# If active tracks are low or it is time to run a detection, do so
+			if (self._tDB.getNumActiveTracks() < self._desiredActiveTracks or timestamp - self._lastDetectionTime > self._detectionInterval):
+				# Mask active track end points
+				searchMask = np.copy(self._data.mask)
+				for point in self._tDB.getActiveEndpoints():
+					cv2.circle(searchMask, tuple(point), 5, 0, -1)
+
+				detections = self._gd.detect(grayImg, searchMask)
+				self._tDB.addNewTracks([Track.from_point(p, timestamp) for p in detections])
+				self._lastDetectionTime = timestamp
+				del searchMask
+
+			self._lastTimestamp = timestamp
+
+			del grayImg, img
+
+	def saveApproximation(self, timestamp=None):
+		if timestamp is None:
+			timestamp = self._lastTimestamp
+
+		self._mDB.clearMeasurements()
+		tracks = self._tDB.getHistoricalTracks()
+
+		print("Extracting and Filtering Measurements")
+		unwarpedTracks = [self._undistortTransform.transformTrack(t) for t in tracks]
+		tracksForMeasurement = [self._pxTransform.transformTrack(t) for t in unwarpedTracks]
+		for t in tracksForMeasurement:
+			self._mDB.addMeasurements(t.measureVelocity(minDist=0.0, scoring='composite'))
+
+		print("Run Gaussian Process Regression")
+		measurements = self._mDB.getMeasurements(measurementsPerCell=1)
+		if len(measurements) > 0:
+			self._gp.clearMeasurements()
+			self._gp.addMeasurements(measurements)
+			approxField = self._gp.approximate()
+		else:
+			print("Error: No Measurements Available")
+			return
+
+		print("Saving Approximation to File")
+
+		approxFieldFile = f"{self._runDir}approx_{timestamp:.2f}.field"
+		with open(approxFieldFile, mode='wb') as f:
+			dill.dump(approxField, f)
+
+
+	def saveTracks(self, timestamp=None):
+		if timestamp is None:
+			timestamp = self._lastTimestamp
+
+		tracks = self._tDB.getAllTracks()
 
 		for i, t in enumerate(tracks):
 			t.save(self._trackDir + f"track_{i}.yaml")

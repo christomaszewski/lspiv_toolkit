@@ -29,7 +29,7 @@ from lspiv_toolkit.filtering.measurements import MeasurementDB
 
 from viz_toolkit.view import ImageView, OverlayView, FieldOverlayView
 
-from lspiv_toolkit.pipeline import BasicPipeline
+from lspiv_toolkit.pipeline import SlimPipeline
 
 def generateGifs():
 	# Gif generation
@@ -60,14 +60,14 @@ def generateGifs():
 
 
 if __name__ == '__main__':
-	datasetName = 'llobregat_15min'
+	datasetName = 'llobregat_5min'
 	datasetFilename = '../../../datasets/' + datasetName + '.yaml'
 
 	outputDir = '../../../output/'
 
-	pipeline = BasicPipeline(datasetFilename, outputDir)
+	pipeline = SlimPipeline(datasetFilename, outputDir)
 	pipeline.initialize()
-	pipeline.loop()
+	pipeline.run()
 	pipeline.saveTracks()
 	pipeline.saveApproximation()
 
