@@ -19,7 +19,6 @@ from cv_toolkit.transform.common import PixelCoordinateTransform
 from cv_toolkit.transform.common import IdentityTransform
 
 import field_toolkit.approx as field_approx
-import field_toolkit.viz as field_viz
 
 from primitives.track import Track
 from primitives.grid import Grid
@@ -29,7 +28,7 @@ from lspiv_toolkit.filtering.measurements import MeasurementDB
 
 from viz_toolkit.view import ImageView, OverlayView, FieldOverlayView
 
-from lspiv_toolkit.pipeline import SlimPipeline
+from lspiv_toolkit.pipeline import BasicPipeline, SlimPipeline
 
 def generateGifs():
 	# Gif generation
@@ -60,7 +59,7 @@ def generateGifs():
 
 
 if __name__ == '__main__':
-	datasetName = 'llobregat_5min'
+	datasetName = 'llobregat_full'
 	datasetFilename = '../../../datasets/' + datasetName + '.yaml'
 
 	outputDir = '../../../output/'

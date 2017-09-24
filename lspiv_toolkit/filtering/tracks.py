@@ -4,21 +4,23 @@ from primitives.track import Track, TrackState
 
 class TrackDB(object):
 
-	def __init__(self):
+	def __init__(self, threshold=0.004, minAge=1.55, minDisplacement=100, minSpeed=1, meanderingRatio=0.9):
 		# Threshold for moving tracks to historical db
-		self._historicalThreshold = 0.004 # Allows 1 frame drop with 30 fps video
+		self._historicalThreshold = threshold # 0.004 Allows 1 frame drop with 30 fps video
 
 		# Minimum age of historical tracks
-		self._minAge = 1.5 #seconds
+		self._minAge = minAge #seconds
 
 		# Minimum total displacement of historical tracks
-		self._minDisplacement =  60 #pixels
+		self._minDisplacement = minDisplacement #pixels
 
 		# Minimum avg speed of historical tracks
-		self._minSpeed = 1 #px/s
+		self._minSpeed = minSpeed #px/s
 
 		# Min Meandering ratio: displacement/(avgSpeed * age)
-		self._minMeadering = 0.9
+		self._meanderingRatio = meanderingRatio
+
+		print(threshold, minAge, minDisplacement, minSpeed, meanderingRatio)
 
 		# List of active tracks
 		self._activeList = []
@@ -65,18 +67,22 @@ class TrackDB(object):
 				t.state = TrackState.ACTIVE
 				updatedTracks.append(t)
 			else:
-				if (timestamp - t.lastSeen > self._historicalThreshold):
+				if (timestamp - t.lastSeen > self._historicalThreshold and t.size() > 1):
 					# Candidate for storage
 					age = t.age()
-					displacement = t.length()
+					displacement = t.displacement()
+					distance = t.distance()
+					meanderingRatio = displacement / distance
 					if (age < self._minAge):
 						del t
-						continue
 					elif (displacement < self._minDisplacement):
 						print('track too short')
 						del t
 					elif (t.avgSpeedFast < self._minSpeed):
 						print('track too slow')
+						del t
+					elif (meanderingRatio < self._meanderingRatio):
+						print('track meanders')
 						del t
 					else:
 						print('moving track to historical db', age, displacement)
@@ -95,9 +101,9 @@ class TrackDB(object):
 
 	def updateActiveTracks(self, points, timestamp):
 		#todo: check that length of points is same as number of active tracks
-
-		updatedTracks = []
 		activeList = self._activeList
+		del self._activeList
+		self._activeList = []
 
 		for i, t in enumerate(activeList):
 
@@ -105,22 +111,27 @@ class TrackDB(object):
 				if (points[i].ndim < 1):
 					print("error in updates:", points[i])
 				t.addObservation(points[i], timestamp)
-				t.state = TrackState.ACTIVE
-				updatedTracks.append(t)
-				#heapq.heappush(updatedTracks, t)
+				#t.state = TrackState.ACTIVE
+				self._activeList.append(t)
+				#heapq.heappush(self._activeList, t)
 			else:
-				if (timestamp - t.lastSeen > self._historicalThreshold):
+				if (timestamp - t.lastSeen > self._historicalThreshold and t.size() > 1):
 					# Candidate for storage
 					age = t.age()
-					displacement = t.length()
+					displacement = t.displacement()
+					distance = t.distance()
+					meanderingRatio = displacement / distance
 					if (age < self._minAge):
+						#print('track age too short')
 						del t
-						continue
 					elif (displacement < self._minDisplacement):
-						#print('track too short')
+						#print('track displacement too short')
 						del t
 					elif (t.avgSpeedFast < self._minSpeed):
 						#print('track too slow')
+						del t
+					elif (meanderingRatio < self._meanderingRatio):
+						#print('track meanders')
 						del t
 					else:
 						#print('moving track to historical db', age, displacement)
@@ -128,19 +139,15 @@ class TrackDB(object):
 						self._historicalList.add(t)
 				else:
 					t.state = TrackState.LOST
-					updatedTracks.append(t)
+					self._activeList.append(t)
 
-
-		del self._activeList
-		self._activeList = updatedTracks
+		del activeList
 
 		print(f"Updating tracks. Active: {len(self._activeList)}, Historical: {len(self._historicalList)}")
 
-		if (len(self._historicalList) > 2000):
+		if (len(self._historicalList) > 20000):
 			self.pruneTracks()
 
 
-	def pruneTracks(self, numTracks=1000):
-		self._historicalList = SortedList(self._historicalList[:numTracks])
-
-		
+	def pruneTracks(self, numTracks=15000):
+		del self._historicalList[numTracks:]

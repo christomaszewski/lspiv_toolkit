@@ -1,0 +1,21 @@
+!Pipeline_Config
+_blockSize: 7
+_borderBuffer: 50
+_datasetFile: /home/ckt/datasets/llobregat_2_preboat_png.yaml
+_detectionGridDim: !!python/tuple [187, 103]
+_detectionInterval: 1
+_epsilon: 0.01
+_historicalThreshold: 0.004
+_maxCellFeatures: 1
+_maxFeatures: 40000
+_maxIter: 30
+_maxLevel: 3
+_meanderingRatio: 0.9
+_minAge: 1.0
+_minDisplacement: 25.0
+_minFeatureDistance: 10.0
+_minSpeed: 5.0
+_numDesiredTracks: 1000
+_outputDir: /home/ckt/output
+_qualityLevel: 0.01
+_windowSize: !!python/tuple [21, 21]
