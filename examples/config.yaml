@@ -2,7 +2,7 @@
 _blockSize: 7
 _borderBuffer: 50
 _datasetFile: /home/ckt/datasets/llobregat_2_preboat_png.yaml
-_detectionGridDim: !!python/tuple [187, 103]
+_detectionGridDim: !!python/tuple [187, 108]
 _detectionInterval: 1
 _epsilon: 0.01
 _historicalThreshold: 0.004

@@ -1,7 +1,7 @@
 !Approximation_Config
 _approximationMethod: simple
 _measurementBinCapacity: 100
-_measurementGridDim: !!python/tuple [384, 108]
+_measurementGridDim: !!python/tuple [240, 108]
 _measurementsPerCell: 1
 _outputDir: /home/ckt/output/icra/llobregat_full
 _scoringMethod: time

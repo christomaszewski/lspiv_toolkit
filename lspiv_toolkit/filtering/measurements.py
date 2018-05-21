@@ -10,9 +10,10 @@ from primitives.grid import Grid
 
 class MeasurementDB(object):
 
-	def __init__(self, grid, cellMeasurementLimit):
+	def __init__(self, grid, measurementBinCapacity, filteringMethod):
 		self._grid = grid
-		self._cellMeasurementLimit = cellMeasurementLimit
+		self._binCapacity = measurementBinCapacity
+		self._filteringMethod = filteringMethod
 
 		self._measurementBins = defaultdict(SortedList)
 
@@ -26,7 +27,7 @@ class MeasurementDB(object):
 
 		bucket = self._measurementBins[gridCoord]
 
-		if (len(bucket) >= self._cellMeasurementLimit):
+		if (len(bucket) >= self._binCapacity):
 			bucket.add(measurement)
 			bucket.pop()
 			#heapq.heappushpop(bucket, measurement)
@@ -42,7 +43,7 @@ class MeasurementDB(object):
 
 
 		if measurementsPerCell is None:
-			measurementsPerCell = self._cellMeasurementLimit
+			measurementsPerCell = self._binCapacity
 
 		for mBin in self._measurementBins.values():
 
@@ -89,7 +90,7 @@ class MeasurementDB(object):
 		coverage = set()
 
 		if measurementsPerCell is None:
-			measurementsPerCell = self._cellMeasurementLimit
+			measurementsPerCell = self._binCapacity
 
 		for mBin in self._measurementBins.values():
 
@@ -117,7 +118,7 @@ class MeasurementDB(object):
 		coverage = set()
 
 		if measurementsPerCell is None:
-			measurementsPerCell = self._cellMeasurementLimit
+			measurementsPerCell = self._binCapacity
 
 		for mBin in self._measurementBins.values():
 
@@ -131,7 +132,7 @@ class MeasurementDB(object):
 	def getBinnedScores(self):
 		binScore = defaultdict(list)
 
-		for key in self._measurementBins:
+		for key in self._measurementBins.keys():
 			binScore[key] = [-m.score for m in self._measurementBins[key]]
 
 		return binScore

@@ -4,7 +4,7 @@ from primitives.track import Track, TrackState
 
 class TrackDB(object):
 
-	def __init__(self, threshold=0.004, minAge=1.55, minDisplacement=100, minSpeed=1, meanderingRatio=0.9):
+	def __init__(self, threshold=0.004, minAge=1.55, minDisplacement=100, minSpeed=1, meanderingRatio=0.9, maxTracks=20000):
 		# Threshold for moving tracks to historical db
 		self._historicalThreshold = threshold # 0.004 Allows 1 frame drop with 30 fps video
 
@@ -28,6 +28,17 @@ class TrackDB(object):
 		# SortedList of historical tracks
 		self._historicalList = SortedList()
 
+		# Max number of historical tracks to maintain
+		self._maxTracks = maxTracks
+
+		# Don't save pruned tracks unless specified
+		self._savePruned = False
+		self._prunedDir = None
+
+	def savePrunedTracks(self, prunedDir):
+		self._prunedDir = prunedDir
+		self._savePruned = True
+
 	def getActiveTracks(self):
 		return self._activeList
 
@@ -46,58 +57,41 @@ class TrackDB(object):
 		endpoints = [t.endPoint for t in self._activeList]
 		return endpoints
 
-	def getActiveKeyPoints(self):
-		keyPoints = [t.lastKeyPoint for t in self._activeList]
-		return keyPoints
-
 	def addNewTrack(self, track):
 		self._activeList.append(track)
 
 	def addNewTracks(self, tracks):
 		self._activeList.extend(tracks)
 
-	def updateActiveTracksKeyPoints(self, keyPoints, timestamp, indices):
-		updatedTracks = []
+	def terminateActiveTracks(self):
 		activeList = self._activeList
+		del self._activeList
+		self._activeList = []
 
-		for i, index in enumerate(indices):
-			t = activeList[index]
-			if (keyPoints[i] is not None):
-				t.addKeyPointObservation(keyPoints[i], timestamp)
-				t.state = TrackState.ACTIVE
-				updatedTracks.append(t)
+		for t in activeList:
+			age = t.age()
+			displacement = t.displacement()
+			distance = t.distance()
+			if distance < 0.1:
+				del t
+				continue
+				
+			meanderingRatio = displacement / distance
+			if (age < self._minAge):
+				#print('track age too short')
+				del t
+			elif (displacement < self._minDisplacement):
+				#print('track displacement too short')
+				del t
+			elif (t.avgSpeedFast < self._minSpeed):
+				#print('track too slow')
+				del t
+			elif (meanderingRatio < self._meanderingRatio):
+				#print('track meanders')
+				del t
 			else:
-				if (timestamp - t.lastSeen > self._historicalThreshold and t.size() > 1):
-					# Candidate for storage
-					age = t.age()
-					displacement = t.displacement()
-					distance = t.distance()
-					meanderingRatio = displacement / distance
-					if (age < self._minAge):
-						del t
-					elif (displacement < self._minDisplacement):
-						print('track too short')
-						del t
-					elif (t.avgSpeedFast < self._minSpeed):
-						print('track too slow')
-						del t
-					elif (meanderingRatio < self._meanderingRatio):
-						print('track meanders')
-						del t
-					else:
-						print('moving track to historical db', age, displacement)
-						t.state = TrackState.HISTORICAL
-						self._historicalList.add(t)
-				else:
-					t.state = TrackState.LOST
-					updatedTracks.append(t)
-
-
-		self._activeList = updatedTracks
-
-		print(f"Updating tracks. Active: {len(self._activeList)}, Historical: {len(self._historicalList)}")
-		#print("active tracks:", len(self._activeList))
-		#print("historical tracks:", len(self._historicalList))
+				# Don't set state to historical so we can tell it was still active
+				self._historicalList.add(t)
 
 	def updateActiveTracks(self, points, timestamp):
 		#todo: check that length of points is same as number of active tracks
@@ -145,9 +139,16 @@ class TrackDB(object):
 
 		print(f"Updating tracks. Active: {len(self._activeList)}, Historical: {len(self._historicalList)}")
 
-		if (len(self._historicalList) > 20000):
+		if (len(self._historicalList) > self._maxTracks):
 			self.pruneTracks()
 
 
-	def pruneTracks(self, numTracks=15000):
+	def pruneTracks(self, numTracks=None):
+		if numTracks is None:
+			numTracks = int(self._maxTracks/2)
+
+		if self._savePruned:
+			for track in self._historicalList[numTracks:]:
+				track.save(f"{self._prunedDir}/track_{track.id}.json")
+
 		del self._historicalList[numTracks:]

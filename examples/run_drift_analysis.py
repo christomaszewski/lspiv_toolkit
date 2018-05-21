@@ -1,8 +1,8 @@
 import sys
 import glob
 import os
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from context import lspiv_toolkit
 
@@ -10,8 +10,8 @@ from primitives.track import Track
 from primitives.grid import Grid
 
 import field_toolkit.approx as field_approx
-from field_toolkit.core.fields import VectorField
 from field_toolkit.analysis.drift import DriftAnalysis
+from field_toolkit.core.fields import VectorField
 
 from viz_toolkit.view import OverlayView, FieldOverlayView
 
@@ -19,14 +19,22 @@ from cv_toolkit.data import Dataset
 from cv_toolkit.transform.camera import UndistortionTransform
 from cv_toolkit.transform.common import PixelCoordinateTransform
 
-from lspiv_toolkit.config import PipelineConfig
+from lspiv_toolkit.config import PipelineConfig, ApproximationConfig
 from lspiv_toolkit.filtering.measurements import MeasurementDB
 
-# Parse output folder
-outputDir = os.path.abspath(sys.argv[1])
 
-# Create output file names
-trackPlotFilename = f"{outputDir}/track_plot.pdf"
+# Parse output folder and generate other folder names
+outputDir = os.path.abspath(sys.argv[1])
+trackDir = f"{outputDir}/tracks"
+testTrackDir = f"{trackDir}/test"
+trainTrackDir = f"{trackDir}/train"
+evalTrackDir = f"{trackDir}/eval"
+
+# Parse field filename
+fieldFile = os.path.abspath(sys.argv[2])
+
+# Load field
+field = VectorField.from_file(fieldFile)
 
 # Load config file
 configFile = f"{outputDir}/config.yaml"
@@ -39,79 +47,51 @@ data = Dataset.from_file(config.datasetFile)
 imageView = OverlayView(grid=None)
 
 # Setup transformation objects
-undistortTransform = UndistortionTransform(data.camera)
-pxTransform = PixelCoordinateTransform(data.imgSize)
+unTrans = UndistortionTransform(data.camera)
+pxTrans = PixelCoordinateTransform(data.imgSize)
 
 # Load tracks
-trackDir = f"{outputDir}/tracks"
-testTrackFiles = sorted(glob.glob(f"{trackDir}/test/track_*.yaml"))
-knownTrackFiles = sorted(glob.glob(f"{trackDir}/known/track_*.yaml"))
-testTracks = [Track.from_file(t) for t in testTrackFiles]
-knownTracks = [Track.from_file(t) for t in knownTrackFiles]
+testTrackFiles = glob.glob(f"{testTrackDir}/track_*.yaml")
+testTracks = Track.from_file_list(testTrackFiles)
 
 # Unwarp tracks
-warpedTestTracks = [undistortTransform.transformTrack(t) for t in testTracks]
-transformedTestTracks = [pxTransform.transformTrack(t) for t in warpedTestTracks]
-warpedKnownTracks = [undistortTransform.transformTrack(t) for t in knownTracks]
-transformedKnownTracks = [pxTransform.transformTrack(t) for t in warpedKnownTracks]
+warpedTestTracks = [unTrans.transformTrack(t) for t in testTracks]
+transformedTestTracks = [pxTrans.transformTrack(t) for t in warpedTestTracks]
 
 # Load and transform background image
 img, timestamp = data.read()
-undistortedImg = undistortTransform.transformImage(img)
-transformedImg = pxTransform.transformImage(undistortedImg)
+undistortedImg = unTrans.transformImage(img)
+transformedImg = pxTrans.transformImage(undistortedImg)
 
-# Todo: Can we speed this up?
-approxFieldFile = f"{outputDir}/approx.field"
-approxField = VectorField.from_file(approxFieldFile)
+# Setup visualization of drift analysis
+driftView = OverlayView(grid=None)
+driftView.updateImage(transformedImg, timestamp)
 
 # Run Drift analysis on known tracks
-da = DriftAnalysis(approxField)
+da = DriftAnalysis(field)
 
-driftAnalysisFile = f"{outputDir}/drift_analysis_known.pdf"
-imageView.updateImage(transformedImg, timestamp)
+# Initialize lists to store different metrics for each track
+meanErrors = []
+maxErrors = []
+meanNormErrors = []
+maxNormErrors = []
 
-for tr in transformedKnownTracks:
-	simTrack, x, y, errors, normErrors = da.evaluate(tr)
+for t in transformedTestTracks:
+	print(f"Processing Test track {t.id}...")
+	simTrack, x, y, errors, normErrors = da.evaluate(t, mass=0.00001)
 
-	fig = plt.figure()
-	ax = fig.add_subplot(111)
-	ax.plot(tr.times[-len(normErrors):], normErrors, color='red', label='Norm Error (px/s)')
-	ax.plot(tr.times, errors, label='Error (px)')
-	ax.legend()
-	ax.set_xlabel("Time (s)")
-	ax.set_ylabel("Error and Error/s (px and px/s)")
-	plt.show()
-	fig.savefig(f"{outputDir}/ErrorsVsTime_track_{tr.id}.pdf")
-	plt.close(fig)
+	meanErrors.append(np.mean(errors))
+	maxErrors.append(np.max(errors))
+	meanNormErrors.append(np.mean(normErrors))
+	maxNormErrors.append(np.max(normErrors))
 
-	imageView.plotTracks([tr, simTrack], [(0.0,1.0,0.0), (1.0,0.0,0.0)])
-	imageView.plotAnnotatedLine(x, y)
-	imageView.plot()
+	driftView.plotTracks([t,simTrack], [(0.,1.,0.), (1.,0.,0.)])
+	driftView.plotAnnotatedLine(x,y)
+	driftView.plot()
 
-imageView.save(driftAnalysisFile)
+print(meanErrors, np.mean(meanErrors))
+print(maxErrors, np.mean(maxErrors))
+print(meanNormErrors, np.mean(meanNormErrors))
+print(maxNormErrors, np.mean(maxNormErrors))
 
-driftAnalysisFile = f"{outputDir}/drift_analysis_test.pdf"
-imageView.clearTracks()
-imageView.updateImage(transformedImg, timestamp)
-
-boatMass = 10. #kg
-
-for tr in transformedTestTracks:
-	simTrack, x, y, errors, normErrors = da.evaluate(tr, boatMass)
-
-	fig = plt.figure()
-	ax = fig.add_subplot(111)
-	ax.plot(tr.times[-len(normErrors):], normErrors, color='red', label='Norm Error (px/s)')
-	ax.plot(tr.times, errors, label='Error (px)')
-	ax.legend()
-	ax.set_xlabel("Time (s)")
-	ax.set_ylabel("Error and Error/s (px and px/s)")
-	plt.show()
-	fig.savefig(f"{outputDir}/ErrorsVsTime_track_{tr.id}.pdf")
-	plt.close(fig)
-
-	imageView.plotTracks([tr, simTrack], [(0.0,1.0,0.0), (1.0,0.0,0.0)])
-	imageView.plotAnnotatedLine(x, y)
-	imageView.plot()
-
-imageView.save(driftAnalysisFile)
+driftView.save(f"{outputDir}/eval_drift_analysis.pdf")
